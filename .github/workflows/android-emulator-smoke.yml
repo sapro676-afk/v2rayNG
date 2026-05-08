@@ -1,0 +1,171 @@
+name: Android emulator smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  emulator-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          log-accepted-android-sdk-licenses: false
+          cmdline-tools-version: "13114758"
+          packages: "platforms;android-36.1 build-tools;36.1.0 platform-tools emulator"
+
+      - name: Install NDK
+        run: |
+          set -euo pipefail
+          echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            --channel=0 \
+            --install "ndk;28.2.13676358"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+
+      - name: Restore cached libhevtun
+        id: cache-libhevtun-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/libs
+          key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+
+      - name: Build libhevtun
+        if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
+        run: bash compile-hevtun.sh
+
+      - name: Save libhevtun
+        if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/libs
+          key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+
+      - name: Copy libhevtun
+        run: cp -r "$GITHUB_WORKSPACE/libs" "$GITHUB_WORKSPACE/V2rayNG/app"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: false
+
+      - name: Build olcRTC Android x86_64
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/openlibrecommunity/olcrtc.git "$RUNNER_TEMP/olcrtc"
+          mkdir -p "$GITHUB_WORKSPACE/V2rayNG/app/libs/x86_64"
+          mkdir -p "$GITHUB_WORKSPACE/V2rayNG/app/src/main/assets/olcrtc-data"
+          cp "$RUNNER_TEMP/olcrtc/data/names" "$GITHUB_WORKSPACE/V2rayNG/app/src/main/assets/olcrtc-data/names"
+          cp "$RUNNER_TEMP/olcrtc/data/surnames" "$GITHUB_WORKSPACE/V2rayNG/app/src/main/assets/olcrtc-data/surnames"
+          cd "$RUNNER_TEMP/olcrtc"
+          CGO_ENABLED=0 GOOS=android GOARCH=amd64 \
+            go build -trimpath -ldflags="-s -w -checklinkname=0" \
+            -o "$GITHUB_WORKSPACE/V2rayNG/app/libs/x86_64/libolcrtc.so" ./cmd/olcrtc
+          chmod 0755 "$GITHUB_WORKSPACE/V2rayNG/app/libs/x86_64/libolcrtc.so"
+
+      - name: Prepare bundled olcRTC fallback profile
+        env:
+          ABUMBA_FALLBACK_JSON_B64: ${{ secrets.ABUMBA_FALLBACK_JSON_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "$ABUMBA_FALLBACK_JSON_B64"
+          mkdir -p "$GITHUB_WORKSPACE/V2rayNG/app/src/main/assets/olcrtc"
+          printf '%s' "$ABUMBA_FALLBACK_JSON_B64" \
+            | base64 -d \
+            > "$GITHUB_WORKSPACE/V2rayNG/app/src/main/assets/olcrtc/abumba_video_fallback.json"
+
+      - name: Resolve AndroidLibXrayLite tag
+        run: |
+          set -euo pipefail
+          git -C AndroidLibXrayLite fetch --tags --force
+          CURRENT_TAG="$(git -C AndroidLibXrayLite describe --tags --abbrev=0)"
+          echo "CURRENT_TAG=$CURRENT_TAG" >> "$GITHUB_ENV"
+
+      - name: Download libv2ray
+        uses: robinraju/release-downloader@v1.13
+        with:
+          repository: "2dust/AndroidLibXrayLite"
+          tag: ${{ env.CURRENT_TAG }}
+          fileName: "libv2ray.aar"
+          out-file-path: V2rayNG/app/libs/
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+          cache-dependency-path: |
+            V2rayNG/*.gradle.kts
+            V2rayNG/gradle/**/*.toml
+            V2rayNG/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Build fdroid debug x86_64 APK
+        env:
+          OLCRTC_KEY: ${{ secrets.OLCRTC_KEY }}
+          OLCRTC_ROOM_ID: ${{ secrets.OLCRTC_ROOM_ID }}
+          OLCRTC_CLIENT_ID: ${{ secrets.OLCRTC_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$OLCRTC_KEY"
+          test -n "$OLCRTC_ROOM_ID"
+          cd "$GITHUB_WORKSPACE/V2rayNG"
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod 755 gradlew
+          ./gradlew --no-daemon assembleFdroidDebug -PABI_FILTERS=x86_64
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run emulator smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            mkdir -p "$GITHUB_WORKSPACE/emulator-artifacts"
+            APK="$(ls "$GITHUB_WORKSPACE"/V2rayNG/app/build/outputs/apk/fdroid/debug/*x86_64*.apk | head -1)"
+            cp "$APK" "$GITHUB_WORKSPACE/emulator-artifacts/"
+            adb install -r "$APK"
+            adb shell pm list packages com.v2ray.ang.olcrtc | tee "$GITHUB_WORKSPACE/emulator-artifacts/packages.txt"
+            adb shell monkey -p com.v2ray.ang.olcrtc -c android.intent.category.LAUNCHER 1
+            sleep 8
+            adb shell am broadcast \
+              -a com.v2ray.ang.olcrtc.action.OLCRTC_DEBUG_START \
+              -n com.v2ray.ang.olcrtc/com.v2ray.ang.olcrtc.OlcRtcDebugReceiver \
+              | tee "$GITHUB_WORKSPACE/emulator-artifacts/debug-start-broadcast.txt"
+            sleep 20
+            adb shell am broadcast \
+              -a com.v2ray.ang.olcrtc.action.OLCRTC_DEBUG_STOP \
+              -n com.v2ray.ang.olcrtc/com.v2ray.ang.olcrtc.OlcRtcDebugReceiver \
+              | tee "$GITHUB_WORKSPACE/emulator-artifacts/debug-stop-broadcast.txt" || true
+            adb exec-out run-as com.v2ray.ang.olcrtc cat files/olcrtc.log \
+              > "$GITHUB_WORKSPACE/emulator-artifacts/olcrtc.log" || true
+            adb logcat -d -v time > "$GITHUB_WORKSPACE/emulator-artifacts/logcat.txt" || true
+            adb shell dumpsys package com.v2ray.ang.olcrtc \
+              > "$GITHUB_WORKSPACE/emulator-artifacts/package-dumpsys.txt" || true
+            test -s "$GITHUB_WORKSPACE/emulator-artifacts/olcrtc.log"
+
+      - name: Upload emulator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2rayng-olcrtc-emulator-diagnostics
+          path: emulator-artifacts/
+          if-no-files-found: warn
