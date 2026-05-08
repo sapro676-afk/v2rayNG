@@ -24,6 +24,8 @@ android {
         buildConfigField("String", "OLCRTC_CLIENT_ID", (System.getenv("OLCRTC_CLIENT_ID") ?: "").asBuildConfigString())
 
         val abiFilterList = (properties["ABI_FILTERS"] as? String)?.split(';')
+        val buildUniversalApk =
+            (properties["UNIVERSAL_APK"] as? String)?.toBooleanStrictOrNull() ?: abiFilterList.isNullOrEmpty()
         splits {
             abi {
                 isEnable = true
@@ -38,7 +40,7 @@ android {
                         "x86"
                     )
                 }
-                isUniversalApk = abiFilterList.isNullOrEmpty()
+                isUniversalApk = buildUniversalApk
             }
         }
 
