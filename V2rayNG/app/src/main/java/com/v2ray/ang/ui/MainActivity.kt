@@ -33,6 +33,7 @@ import com.v2ray.ang.handler.SettingsChangeManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.SubscriptionUpdater
 import com.v2ray.ang.core.CoreServiceManager
+import com.v2ray.ang.olcrtc.OlcRtcProfileInstaller
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
 import com.v2ray.ang.viewmodel.MainViewModel
@@ -101,6 +102,7 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
         setupViewModel()
         SubscriptionUpdater.sync()
         mainViewModel.reloadServerList()
+        installBundledOlcRtcFallback()
 
         checkAndRequestPermission(PermissionType.POST_NOTIFICATIONS) {
         }
@@ -246,6 +248,11 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
 
         R.id.import_local -> {
             importConfigLocal()
+            true
+        }
+
+        R.id.import_olcrtc_fallback -> {
+            importOlcRtcFallback()
             true
         }
 
@@ -431,6 +438,37 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
                 LogUtil.e(AppConfig.TAG, "Failed to import batch config", e)
             }
         }
+    }
+
+    private fun installBundledOlcRtcFallback() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val installed = OlcRtcProfileInstaller.ensureInstalled(this@MainActivity)
+            if (!installed) return@launch
+
+            withContext(Dispatchers.Main) {
+                setupGroupTab()
+                mainViewModel.reloadServerList()
+                toast(R.string.title_import_olcrtc_fallback_success)
+            }
+        }
+    }
+
+    private fun importOlcRtcFallback(): Boolean {
+        showLoading()
+        lifecycleScope.launch(Dispatchers.IO) {
+            val installed = OlcRtcProfileInstaller.reinstall(this@MainActivity)
+            withContext(Dispatchers.Main) {
+                if (installed) {
+                    setupGroupTab()
+                    mainViewModel.reloadServerList()
+                    toast(R.string.title_import_olcrtc_fallback_success)
+                } else {
+                    toastError(R.string.toast_failure)
+                }
+                hideLoading()
+            }
+        }
+        return true
     }
 
     /**

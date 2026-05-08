@@ -56,6 +56,37 @@ jobs:
       - name: Copy libhevtun
         run: cp -r "$GITHUB_WORKSPACE/libs" "$GITHUB_WORKSPACE/V2rayNG/app"
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.0"
+          cache: false
+
+      - name: Build olcRTC Android arm64
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/openlibrecommunity/olcrtc.git "$RUNNER_TEMP/olcrtc"
+          mkdir -p "$GITHUB_WORKSPACE/V2rayNG/app/libs/arm64-v8a"
+          mkdir -p "$GITHUB_WORKSPACE/V2rayNG/app/src/main/assets/olcrtc-data"
+          cp "$RUNNER_TEMP/olcrtc/data/names" "$GITHUB_WORKSPACE/V2rayNG/app/src/main/assets/olcrtc-data/names"
+          cp "$RUNNER_TEMP/olcrtc/data/surnames" "$GITHUB_WORKSPACE/V2rayNG/app/src/main/assets/olcrtc-data/surnames"
+          cd "$RUNNER_TEMP/olcrtc"
+          CGO_ENABLED=0 GOOS=android GOARCH=arm64 \
+            go build -trimpath -ldflags="-s -w" \
+            -o "$GITHUB_WORKSPACE/V2rayNG/app/libs/arm64-v8a/libolcrtc.so" ./cmd/olcrtc
+          chmod 0755 "$GITHUB_WORKSPACE/V2rayNG/app/libs/arm64-v8a/libolcrtc.so"
+
+      - name: Prepare bundled olcRTC fallback profile
+        env:
+          ABUMBA_FALLBACK_JSON_B64: ${{ secrets.ABUMBA_FALLBACK_JSON_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "$ABUMBA_FALLBACK_JSON_B64"
+          mkdir -p "$GITHUB_WORKSPACE/V2rayNG/app/src/main/assets/olcrtc"
+          printf '%s' "$ABUMBA_FALLBACK_JSON_B64" \
+            | base64 -d \
+            > "$GITHUB_WORKSPACE/V2rayNG/app/src/main/assets/olcrtc/abumba_video_fallback.json"
+
       - name: Resolve AndroidLibXrayLite tag
         run: |
           git -C AndroidLibXrayLite fetch --tags --force
@@ -82,7 +113,14 @@ jobs:
             V2rayNG/gradle/wrapper/gradle-wrapper.properties
 
       - name: Build fdroid debug arm64 APK
+        env:
+          OLCRTC_KEY: ${{ secrets.OLCRTC_KEY }}
+          OLCRTC_ROOM_ID: ${{ secrets.OLCRTC_ROOM_ID }}
+          OLCRTC_CLIENT_ID: ${{ secrets.OLCRTC_CLIENT_ID }}
         run: |
+          set -euo pipefail
+          test -n "$OLCRTC_KEY"
+          test -n "$OLCRTC_ROOM_ID"
           cd "$GITHUB_WORKSPACE/V2rayNG"
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           chmod 755 gradlew

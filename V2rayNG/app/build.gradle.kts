@@ -4,6 +4,9 @@ plugins {
     id("com.jaredsburrows.license")
 }
 
+fun String.asBuildConfigString(): String =
+    "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 android {
     namespace = "com.v2ray.ang"
     compileSdk = 36
@@ -15,6 +18,9 @@ android {
         versionCode = 725
         versionName = "2.1.5"
         multiDexEnabled = true
+        buildConfigField("String", "OLCRTC_KEY", (System.getenv("OLCRTC_KEY") ?: "").asBuildConfigString())
+        buildConfigField("String", "OLCRTC_ROOM_ID", (System.getenv("OLCRTC_ROOM_ID") ?: "").asBuildConfigString())
+        buildConfigField("String", "OLCRTC_CLIENT_ID", (System.getenv("OLCRTC_CLIENT_ID") ?: "").asBuildConfigString())
 
         val abiFilterList = (properties["ABI_FILTERS"] as? String)?.split(';')
         splits {

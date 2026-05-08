@@ -404,6 +404,8 @@
     <string name="title_webdav_user">Username</string>
     <string name="title_webdav_pass">Password</string>
     <string name="title_webdav_remote_path">Remote directory (optional)</string>
+    <string name="menu_item_import_olcrtc_fallback">Abumba video fallback</string>
+    <string name="title_import_olcrtc_fallback_success">Abumba video fallback added</string>
 
     <string-array name="share_method">
         <item>QRcode</item>
