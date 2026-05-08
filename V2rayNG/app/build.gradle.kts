@@ -22,6 +22,9 @@ android {
         buildConfigField("String", "OLCRTC_KEY", (System.getenv("OLCRTC_KEY") ?: "").asBuildConfigString())
         buildConfigField("String", "OLCRTC_ROOM_ID", (System.getenv("OLCRTC_ROOM_ID") ?: "").asBuildConfigString())
         buildConfigField("String", "OLCRTC_CLIENT_ID", (System.getenv("OLCRTC_CLIENT_ID") ?: "").asBuildConfigString())
+        buildConfigField("String", "OLCRTC_CARRIER", (System.getenv("OLCRTC_CARRIER") ?: "wbstream").asBuildConfigString())
+        buildConfigField("String", "OLCRTC_TRANSPORT", (System.getenv("OLCRTC_TRANSPORT") ?: "datachannel").asBuildConfigString())
+        buildConfigField("String", "OLCRTC_LINK", (System.getenv("OLCRTC_LINK") ?: "direct").asBuildConfigString())
 
         val abiFilterList = (properties["ABI_FILTERS"] as? String)?.split(';')
         val buildUniversalApk =

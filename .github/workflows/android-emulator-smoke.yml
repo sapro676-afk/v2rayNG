@@ -121,6 +121,9 @@ jobs:
           OLCRTC_KEY: ${{ secrets.OLCRTC_KEY }}
           OLCRTC_ROOM_ID: ${{ secrets.OLCRTC_ROOM_ID }}
           OLCRTC_CLIENT_ID: ${{ secrets.OLCRTC_CLIENT_ID }}
+          OLCRTC_CARRIER: ${{ vars.OLCRTC_CARRIER || 'wbstream' }}
+          OLCRTC_TRANSPORT: ${{ vars.OLCRTC_TRANSPORT || 'datachannel' }}
+          OLCRTC_LINK: ${{ vars.OLCRTC_LINK || 'direct' }}
         run: |
           set -euo pipefail
           test -n "$OLCRTC_KEY"

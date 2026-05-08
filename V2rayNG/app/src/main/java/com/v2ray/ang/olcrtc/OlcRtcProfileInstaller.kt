@@ -2,7 +2,7 @@ package com.v2ray.ang.olcrtc
 
 import android.content.Context
 import com.v2ray.ang.AppConfig
-import com.v2ray.ang.handler.AngConfigManager
+import com.v2ray.ang.fmt.CustomFmt
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.util.LogUtil
 
@@ -16,24 +16,12 @@ object OlcRtcProfileInstaller {
             return false
         }
 
-        val (count, _) = AngConfigManager.importBatchConfig(configText, AppConfig.DEFAULT_SUBSCRIPTION_ID, true)
-        if (count <= 0) {
-            return false
-        }
-
-        selectInstalledProfile()
-        return true
+        return installCustomConfig(configText) != null
     }
 
     fun reinstall(context: Context): Boolean {
         val configText = readAsset(context) ?: return false
-        val (count, _) = AngConfigManager.importBatchConfig(configText, AppConfig.DEFAULT_SUBSCRIPTION_ID, true)
-        if (count <= 0) {
-            return false
-        }
-
-        selectInstalledProfile()
-        return true
+        return installCustomConfig(configText) != null
     }
 
     private fun readAsset(context: Context): String? {
@@ -55,5 +43,20 @@ object OlcRtcProfileInstaller {
         MmkvManager.decodeAllServerList().firstOrNull { guid ->
             MmkvManager.decodeServerRaw(guid).orEmpty().contains(MARKER)
         }?.let { MmkvManager.setSelectServer(it) }
+    }
+
+    private fun installCustomConfig(configText: String): String? {
+        return try {
+            val config = CustomFmt.parse(configText)
+            config.subscriptionId = AppConfig.DEFAULT_SUBSCRIPTION_ID
+            config.description = config.remarks
+            val guid = MmkvManager.encodeServerConfig("", config)
+            MmkvManager.encodeServerRaw(guid, configText)
+            MmkvManager.setSelectServer(guid)
+            guid
+        } catch (e: Exception) {
+            LogUtil.e(AppConfig.TAG, "failed to install bundled olcRTC fallback profile", e)
+            null
+        }
     }
 }

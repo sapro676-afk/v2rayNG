@@ -52,10 +52,13 @@ object OlcRtcManager {
         val key = BuildConfig.OLCRTC_KEY
         val roomId = BuildConfig.OLCRTC_ROOM_ID
         val clientId = BuildConfig.OLCRTC_CLIENT_ID.ifBlank { "v2rayng-android" }
+        val carrier = BuildConfig.OLCRTC_CARRIER.ifBlank { "wbstream" }
+        val transport = BuildConfig.OLCRTC_TRANSPORT.ifBlank { "datachannel" }
+        val link = BuildConfig.OLCRTC_LINK.ifBlank { "direct" }
         socksReportedListening = false
         lastSocksConnectError = ""
         resetDiagnostics(context)
-        writeDiagnostics(context, "start requested; roomConfigured=${roomId.isNotBlank()}; clientId=$clientId")
+        writeDiagnostics(context, "start requested; roomConfigured=${roomId.isNotBlank()}; clientId=$clientId; carrier=$carrier; transport=$transport; link=$link")
         if (key.isBlank() || roomId.isBlank()) {
             writeDiagnostics(context, "missing olcRTC credentials in BuildConfig")
             error("olcRTC fallback is not configured in this APK")
@@ -76,12 +79,12 @@ object OlcRtcManager {
         val cmd = mutableListOf(
             binary.absolutePath,
             "-mode", "cnc",
-            "-carrier", "wbstream",
-            "-transport", "datachannel",
+            "-carrier", carrier,
+            "-transport", transport,
             "-id", roomId,
             "-client-id", clientId,
             "-key", key,
-            "-link", "direct",
+            "-link", link,
             "-data", dataDir.absolutePath,
             "-socks-host", SOCKS_HOST,
             "-socks-port", SOCKS_PORT,
@@ -90,7 +93,7 @@ object OlcRtcManager {
         )
 
         LogUtil.w(TAG, "olcRTC: starting client")
-        writeDiagnostics(context, "starting client with wbstream/datachannel/direct on $SOCKS_HOST:$SOCKS_PORT")
+        writeDiagnostics(context, "starting client with $carrier/$transport/$link on $SOCKS_HOST:$SOCKS_PORT")
         process = try {
             ProcessBuilder(cmd)
                 .directory(context.filesDir)

@@ -11,7 +11,7 @@ index b62f929..f0ad7cf 100644
  // Protector is called with a socket file descriptor before connect.
  // On Android, this calls VpnService.protect(fd) to bypass VPN routing.
  var Protector func(fd int) bool //nolint:gochecknoglobals
-@@ -29,12 +31,23 @@ func controlFunc(network, _ string, c syscall.RawConn) error {
+@@ -29,12 +31,27 @@ func controlFunc(network, _ string, c syscall.RawConn) error {
  	return err
  }
  
@@ -23,6 +23,10 @@ index b62f929..f0ad7cf 100644
 +			return d.DialContext(ctx, network, androidDNSServer)
 +		},
 +	}
++}
++
++func init() {
++	net.DefaultResolver = protectedResolver()
 +}
 +
  // NewDialer returns a net.Dialer that calls Protector on each new socket.
