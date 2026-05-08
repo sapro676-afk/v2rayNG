@@ -9,6 +9,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.IOException
+import java.io.InterruptedIOException
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.time.Instant
@@ -24,6 +26,12 @@ object OlcRtcManager {
 
     @Volatile
     private var process: Process? = null
+
+    @Volatile
+    private var socksReportedListening: Boolean = false
+
+    @Volatile
+    private var lastSocksConnectError: String = ""
 
     fun isRequired(guid: String): Boolean {
         val config = MmkvManager.decodeServerConfig(guid)
@@ -44,6 +52,8 @@ object OlcRtcManager {
         val key = BuildConfig.OLCRTC_KEY
         val roomId = BuildConfig.OLCRTC_ROOM_ID
         val clientId = BuildConfig.OLCRTC_CLIENT_ID.ifBlank { "v2rayng-android" }
+        socksReportedListening = false
+        lastSocksConnectError = ""
         resetDiagnostics(context)
         writeDiagnostics(context, "start requested; roomConfigured=${roomId.isNotBlank()}; clientId=$clientId")
         if (key.isBlank() || roomId.isBlank()) {
@@ -88,11 +98,20 @@ object OlcRtcManager {
                 .start()
                 .also { proc ->
                     CoroutineScope(Dispatchers.IO).launch {
-                        proc.inputStream.bufferedReader().useLines { lines ->
-                            lines.forEach { line ->
-                                writeDiagnostics(context, line)
-                                LogUtil.w(TAG, "olcRTC: $line")
+                        try {
+                            proc.inputStream.bufferedReader().useLines { lines ->
+                                lines.forEach { line ->
+                                    if (line.contains("SOCKS5 server listening on $SOCKS_HOST:$SOCKS_PORT")) {
+                                        socksReportedListening = true
+                                    }
+                                    writeDiagnostics(context, line)
+                                    LogUtil.w(TAG, "olcRTC: $line")
+                                }
                             }
+                        } catch (e: InterruptedIOException) {
+                            writeDiagnostics(context, "stdout reader closed: ${e.javaClass.simpleName}: ${e.message}")
+                        } catch (e: IOException) {
+                            writeDiagnostics(context, "stdout reader ended: ${e.javaClass.simpleName}: ${e.message}")
                         }
                     }
                 }
@@ -146,20 +165,23 @@ object OlcRtcManager {
         val deadline = System.currentTimeMillis() + SOCKS_START_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
             if (process?.isAlive != true) return false
-            if (canConnectToSocks()) return true
+            if (socksReportedListening || canConnectToSocks()) return true
             Thread.sleep(250L)
         }
-        writeDiagnostics(context, "SOCKS wait timed out after ${SOCKS_START_TIMEOUT_MS}ms")
+        writeDiagnostics(context, "SOCKS wait timed out after ${SOCKS_START_TIMEOUT_MS}ms; lastConnectError=$lastSocksConnectError")
         return false
     }
 
     private fun canConnectToSocks(): Boolean {
-        return runCatching {
+        return try {
             Socket().use { socket ->
                 socket.connect(InetSocketAddress(SOCKS_HOST, SOCKS_PORT.toInt()), 250)
             }
             true
-        }.getOrDefault(false)
+        } catch (e: IOException) {
+            lastSocksConnectError = "${e.javaClass.simpleName}: ${e.message}"
+            false
+        }
     }
 
     private fun resetDiagnostics(context: Context) {
