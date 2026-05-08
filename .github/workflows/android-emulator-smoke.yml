@@ -151,28 +151,18 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: |
-            set -eu
             mkdir -p "$GITHUB_WORKSPACE/emulator-artifacts"
-            APK="$(ls "$GITHUB_WORKSPACE"/V2rayNG/app/build/outputs/apk/fdroid/debug/*x86_64*.apk | head -1)"
-            cp "$APK" "$GITHUB_WORKSPACE/emulator-artifacts/"
-            adb install -r "$APK"
+            cp "$(find "$GITHUB_WORKSPACE/V2rayNG/app/build/outputs/apk/fdroid/debug" -name '*.apk' -print -quit)" "$GITHUB_WORKSPACE/emulator-artifacts/"
+            adb install -r "$(find "$GITHUB_WORKSPACE/V2rayNG/app/build/outputs/apk/fdroid/debug" -name '*.apk' -print -quit)"
             adb shell pm list packages com.v2ray.ang.olcrtc | tee "$GITHUB_WORKSPACE/emulator-artifacts/packages.txt"
             adb shell monkey -p com.v2ray.ang.olcrtc -c android.intent.category.LAUNCHER 1
             sleep 8
-            adb shell am broadcast \
-              -a com.v2ray.ang.olcrtc.action.OLCRTC_DEBUG_START \
-              -n com.v2ray.ang.olcrtc/com.v2ray.ang.olcrtc.OlcRtcDebugReceiver \
-              | tee "$GITHUB_WORKSPACE/emulator-artifacts/debug-start-broadcast.txt"
+            adb shell am broadcast -a com.v2ray.ang.olcrtc.action.OLCRTC_DEBUG_START -n com.v2ray.ang.olcrtc/com.v2ray.ang.olcrtc.OlcRtcDebugReceiver | tee "$GITHUB_WORKSPACE/emulator-artifacts/debug-start-broadcast.txt"
             sleep 20
-            adb shell am broadcast \
-              -a com.v2ray.ang.olcrtc.action.OLCRTC_DEBUG_STOP \
-              -n com.v2ray.ang.olcrtc/com.v2ray.ang.olcrtc.OlcRtcDebugReceiver \
-              | tee "$GITHUB_WORKSPACE/emulator-artifacts/debug-stop-broadcast.txt" || true
-            adb exec-out run-as com.v2ray.ang.olcrtc cat files/olcrtc.log \
-              > "$GITHUB_WORKSPACE/emulator-artifacts/olcrtc.log" || true
+            adb shell am broadcast -a com.v2ray.ang.olcrtc.action.OLCRTC_DEBUG_STOP -n com.v2ray.ang.olcrtc/com.v2ray.ang.olcrtc.OlcRtcDebugReceiver | tee "$GITHUB_WORKSPACE/emulator-artifacts/debug-stop-broadcast.txt" || true
+            adb exec-out run-as com.v2ray.ang.olcrtc cat files/olcrtc.log > "$GITHUB_WORKSPACE/emulator-artifacts/olcrtc.log" || true
             adb logcat -d -v time > "$GITHUB_WORKSPACE/emulator-artifacts/logcat.txt" || true
-            adb shell dumpsys package com.v2ray.ang.olcrtc \
-              > "$GITHUB_WORKSPACE/emulator-artifacts/package-dumpsys.txt" || true
+            adb shell dumpsys package com.v2ray.ang.olcrtc > "$GITHUB_WORKSPACE/emulator-artifacts/package-dumpsys.txt" || true
             test -s "$GITHUB_WORKSPACE/emulator-artifacts/olcrtc.log"
 
       - name: Upload emulator diagnostics
