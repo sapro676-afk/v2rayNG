@@ -135,6 +135,12 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Prepare emulator artifact directory
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/emulator-artifacts"
+          date -Is > "$GITHUB_WORKSPACE/emulator-artifacts/created-at.txt"
+
       - name: Run emulator smoke
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -145,7 +151,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: |
-            set -euo pipefail
+            set -eu
             mkdir -p "$GITHUB_WORKSPACE/emulator-artifacts"
             APK="$(ls "$GITHUB_WORKSPACE"/V2rayNG/app/build/outputs/apk/fdroid/debug/*x86_64*.apk | head -1)"
             cp "$APK" "$GITHUB_WORKSPACE/emulator-artifacts/"
@@ -174,5 +180,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: v2rayng-olcrtc-emulator-diagnostics
-          path: emulator-artifacts/
+          path: ${{ github.workspace }}/emulator-artifacts/
           if-no-files-found: warn
