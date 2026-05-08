@@ -405,7 +405,9 @@
     <string name="title_webdav_pass">Password</string>
     <string name="title_webdav_remote_path">Remote directory (optional)</string>
     <string name="menu_item_import_olcrtc_fallback">Abumba video fallback</string>
+    <string name="menu_item_copy_olcrtc_diagnostics">Copy olcRTC diagnostics</string>
     <string name="title_import_olcrtc_fallback_success">Abumba video fallback added</string>
+    <string name="title_copy_olcrtc_diagnostics_success">olcRTC diagnostics copied</string>
 
     <string-array name="share_method">
         <item>QRcode</item>

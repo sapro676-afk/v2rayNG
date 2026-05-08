@@ -9,13 +9,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
+import java.net.InetSocketAddress
+import java.net.Socket
+import java.time.Instant
 
 object OlcRtcManager {
     private const val TAG = AppConfig.TAG
     private const val MARKER = "olcrtc-socks"
     private const val SOCKS_HOST = "127.0.0.1"
     private const val SOCKS_PORT = "18080"
+    private const val SOCKS_START_TIMEOUT_MS = 8_000L
     private const val DATA_ASSET_DIR = "olcrtc-data"
+    private const val DIAG_FILE = "olcrtc.log"
 
     @Volatile
     private var process: Process? = null
@@ -39,16 +44,25 @@ object OlcRtcManager {
         val key = BuildConfig.OLCRTC_KEY
         val roomId = BuildConfig.OLCRTC_ROOM_ID
         val clientId = BuildConfig.OLCRTC_CLIENT_ID.ifBlank { "v2rayng-android" }
+        resetDiagnostics(context)
+        writeDiagnostics(context, "start requested; roomConfigured=${roomId.isNotBlank()}; clientId=$clientId")
         if (key.isBlank() || roomId.isBlank()) {
+            writeDiagnostics(context, "missing olcRTC credentials in BuildConfig")
             error("olcRTC fallback is not configured in this APK")
         }
 
         val binary = File(context.applicationInfo.nativeLibraryDir, "libolcrtc.so")
+        writeDiagnostics(
+            context,
+            "binary=${binary.absolutePath}; exists=${binary.exists()}; canExecute=${binary.canExecute()}; size=${binary.length()}"
+        )
         if (!binary.canExecute()) {
+            writeDiagnostics(context, "binary is missing or not executable")
             error("olcRTC binary is missing or not executable")
         }
 
         val dataDir = ensureDataDir(context)
+        writeDiagnostics(context, "dataDir=${dataDir.absolutePath}; names=${File(dataDir, "names").length()}; surnames=${File(dataDir, "surnames").length()}")
         val cmd = mutableListOf(
             binary.absolutePath,
             "-mode", "cnc",
@@ -65,31 +79,52 @@ object OlcRtcManager {
             "-debug"
         )
 
-        LogUtil.i(TAG, "olcRTC: starting client")
-        process = ProcessBuilder(cmd)
-            .directory(context.filesDir)
-            .redirectErrorStream(true)
-            .start()
-            .also { proc ->
-                CoroutineScope(Dispatchers.IO).launch {
-                    proc.inputStream.bufferedReader().useLines { lines ->
-                        lines.forEach { line -> LogUtil.i(TAG, "olcRTC: $line") }
+        LogUtil.w(TAG, "olcRTC: starting client")
+        writeDiagnostics(context, "starting client with wbstream/datachannel/direct on $SOCKS_HOST:$SOCKS_PORT")
+        process = try {
+            ProcessBuilder(cmd)
+                .directory(context.filesDir)
+                .redirectErrorStream(true)
+                .start()
+                .also { proc ->
+                    CoroutineScope(Dispatchers.IO).launch {
+                        proc.inputStream.bufferedReader().useLines { lines ->
+                            lines.forEach { line ->
+                                writeDiagnostics(context, line)
+                                LogUtil.w(TAG, "olcRTC: $line")
+                            }
+                        }
                     }
                 }
-            }
-
-        Thread.sleep(1200L)
-        if (process?.isAlive != true) {
-            error("olcRTC client exited during startup")
+        } catch (e: Exception) {
+            writeDiagnostics(context, "failed to start process: ${e.javaClass.simpleName}: ${e.message}")
+            throw e
         }
+
+        if (!waitForSocks(context)) {
+            val proc = process
+            val message = if (proc?.isAlive == true) {
+                "olcRTC SOCKS did not open on $SOCKS_HOST:$SOCKS_PORT"
+            } else {
+                "olcRTC client exited during startup, exit=${runCatching { proc?.exitValue() }.getOrNull()}"
+            }
+            writeDiagnostics(context, message)
+            error(message)
+        }
+        writeDiagnostics(context, "SOCKS listener is ready on $SOCKS_HOST:$SOCKS_PORT")
+        LogUtil.w(TAG, "olcRTC: SOCKS listener is ready on $SOCKS_HOST:$SOCKS_PORT")
     }
 
     @Synchronized
     fun stop() {
         val running = process ?: return
-        LogUtil.i(TAG, "olcRTC: stopping client")
+        LogUtil.w(TAG, "olcRTC: stopping client")
         runCatching { running.destroy() }
         process = null
+    }
+
+    fun readDiagnostics(context: Context): String {
+        return diagnosticFile(context).takeIf { it.exists() }?.readText().orEmpty()
     }
 
     private fun ensureDataDir(context: Context): File {
@@ -105,5 +140,41 @@ object OlcRtcManager {
         context.assets.open(assetName).use { input ->
             target.outputStream().use { output -> input.copyTo(output) }
         }
+    }
+
+    private fun waitForSocks(context: Context): Boolean {
+        val deadline = System.currentTimeMillis() + SOCKS_START_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            if (process?.isAlive != true) return false
+            if (canConnectToSocks()) return true
+            Thread.sleep(250L)
+        }
+        writeDiagnostics(context, "SOCKS wait timed out after ${SOCKS_START_TIMEOUT_MS}ms")
+        return false
+    }
+
+    private fun canConnectToSocks(): Boolean {
+        return runCatching {
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress(SOCKS_HOST, SOCKS_PORT.toInt()), 250)
+            }
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun resetDiagnostics(context: Context) {
+        runCatching {
+            diagnosticFile(context).writeText("")
+        }
+    }
+
+    private fun writeDiagnostics(context: Context, message: String) {
+        runCatching {
+            diagnosticFile(context).appendText("${Instant.now()} $message\n")
+        }
+    }
+
+    private fun diagnosticFile(context: Context): File {
+        return File(context.filesDir, DIAG_FILE)
     }
 }

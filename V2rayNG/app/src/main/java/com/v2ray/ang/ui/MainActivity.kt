@@ -33,6 +33,7 @@ import com.v2ray.ang.handler.SettingsChangeManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.SubscriptionUpdater
 import com.v2ray.ang.core.CoreServiceManager
+import com.v2ray.ang.olcrtc.OlcRtcManager
 import com.v2ray.ang.olcrtc.OlcRtcProfileInstaller
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
@@ -256,6 +257,11 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
             true
         }
 
+        R.id.copy_olcrtc_diagnostics -> {
+            copyOlcRtcDiagnostics()
+            true
+        }
+
         R.id.import_manually_policy_group -> {
             importManually(EConfigType.POLICYGROUP.value)
             true
@@ -382,6 +388,14 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
                     .setClass(this, ServerActivity::class.java)
             )
         }
+    }
+
+    private fun copyOlcRtcDiagnostics() {
+        val diagnostics = OlcRtcManager.readDiagnostics(this).ifBlank {
+            "No olcRTC diagnostics yet. Start Abumba video fallback first."
+        }
+        Utils.setClipboard(this, diagnostics)
+        toast(R.string.title_copy_olcrtc_diagnostics_success)
     }
 
     /**

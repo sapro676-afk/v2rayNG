@@ -29,6 +29,10 @@
                 android:title="@string/menu_item_import_olcrtc_fallback"
                 app:showAsAction="never" />
             <item
+                android:id="@+id/copy_olcrtc_diagnostics"
+                android:title="@string/menu_item_copy_olcrtc_diagnostics"
+                app:showAsAction="never" />
+            <item
                 android:id="@+id/import_manually_policy_group"
                 android:title="@string/menu_item_import_config_policy_group"
                 app:showAsAction="never" />
