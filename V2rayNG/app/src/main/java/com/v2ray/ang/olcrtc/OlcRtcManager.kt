@@ -57,10 +57,12 @@ object OlcRtcManager {
             "-id", roomId,
             "-client-id", clientId,
             "-key", key,
+            "-link", "direct",
             "-data", dataDir.absolutePath,
             "-socks-host", SOCKS_HOST,
             "-socks-port", SOCKS_PORT,
-            "-dns", "1.1.1.1:53"
+            "-dns", "1.1.1.1:53",
+            "-debug"
         )
 
         LogUtil.i(TAG, "olcRTC: starting client")
