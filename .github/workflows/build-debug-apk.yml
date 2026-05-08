@@ -59,7 +59,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25.0"
+          go-version: "1.25"
           cache: false
 
       - name: Build olcRTC Android arm64
