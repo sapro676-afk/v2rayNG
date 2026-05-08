@@ -10,6 +10,7 @@ fun String.asBuildConfigString(): String =
 android {
     namespace = "com.v2ray.ang"
     compileSdk = 36
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.v2ray.ang"
