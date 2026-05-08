@@ -2,6 +2,12 @@ name: Android emulator smoke
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - olcrtc-fallback
+    paths:
+      - ".github/workflows/android-emulator-smoke.yml"
+      - "V2rayNG/app/**"
 
 jobs:
   emulator-smoke:
