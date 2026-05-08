@@ -33,7 +33,7 @@ object OlcRtcProfileInstaller {
         }
     }
 
-    private fun hasInstalledProfile(): Boolean {
+    fun hasInstalledProfile(): Boolean {
         return MmkvManager.decodeAllServerList().any { guid ->
             MmkvManager.decodeServerRaw(guid).orEmpty().contains(MARKER)
         }

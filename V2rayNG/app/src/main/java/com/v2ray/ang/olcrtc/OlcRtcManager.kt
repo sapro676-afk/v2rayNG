@@ -20,7 +20,7 @@ object OlcRtcManager {
     private const val MARKER = "olcrtc-socks"
     private const val SOCKS_HOST = "127.0.0.1"
     private const val SOCKS_PORT = "18080"
-    private const val SOCKS_START_TIMEOUT_MS = 8_000L
+    private const val SOCKS_START_TIMEOUT_MS = 30_000L
     private const val DATA_ASSET_DIR = "olcrtc-data"
     private const val DIAG_FILE = "olcrtc.log"
 

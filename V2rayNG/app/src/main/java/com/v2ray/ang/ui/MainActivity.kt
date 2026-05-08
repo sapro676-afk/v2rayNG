@@ -21,6 +21,7 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.navigation.NavigationView
 import com.google.android.material.tabs.TabLayoutMediator
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.BuildConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.databinding.ActivityMainBinding
 import com.v2ray.ang.enums.EConfigType
@@ -253,7 +254,7 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
         }
 
         R.id.import_olcrtc_fallback -> {
-            importOlcRtcFallback()
+            showOlcRtcConfigurator()
             true
         }
 
@@ -398,6 +399,43 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
         toast(R.string.title_copy_olcrtc_diagnostics_success)
     }
 
+    private fun copyOlcRtcStatus() {
+        Utils.setClipboard(this, buildOlcRtcStatusText())
+        toast(R.string.title_copy_olcrtc_status_success)
+    }
+
+    private fun buildOlcRtcStatusText(): String {
+        val profileStatus = if (OlcRtcProfileInstaller.hasInstalledProfile()) {
+            getString(R.string.olcrtc_status_profile_installed)
+        } else {
+            getString(R.string.olcrtc_status_profile_missing)
+        }
+        val roomStatus = if (BuildConfig.OLCRTC_ROOM_ID.isNotBlank()) {
+            getString(R.string.olcrtc_status_room_configured)
+        } else {
+            getString(R.string.olcrtc_status_room_missing)
+        }
+        val keyStatus = if (BuildConfig.OLCRTC_KEY.isNotBlank()) {
+            getString(R.string.olcrtc_status_key_configured)
+        } else {
+            getString(R.string.olcrtc_status_key_missing)
+        }
+        val clientId = BuildConfig.OLCRTC_CLIENT_ID.ifBlank { "v2rayng-android" }
+        val carrier = BuildConfig.OLCRTC_CARRIER.ifBlank { "wbstream" }
+        val transport = BuildConfig.OLCRTC_TRANSPORT.ifBlank { "datachannel" }
+        val link = BuildConfig.OLCRTC_LINK.ifBlank { "direct" }
+        return getString(
+            R.string.olcrtc_configurator_status,
+            carrier,
+            transport,
+            link,
+            clientId,
+            roomStatus,
+            keyStatus,
+            profileStatus
+        )
+    }
+
     /**
      * import config from qrcode
      */
@@ -467,7 +505,23 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
         }
     }
 
-    private fun importOlcRtcFallback(): Boolean {
+    private fun showOlcRtcConfigurator() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.title_olcrtc_configurator)
+            .setMessage(buildOlcRtcStatusText())
+            .setPositiveButton(R.string.olcrtc_action_install_profile) { _, _ ->
+                importOlcRtcFallback()
+            }
+            .setNegativeButton(R.string.menu_item_copy_olcrtc_diagnostics) { _, _ ->
+                copyOlcRtcDiagnostics()
+            }
+            .setNeutralButton(R.string.olcrtc_action_copy_status) { _, _ ->
+                copyOlcRtcStatus()
+            }
+            .show()
+    }
+
+    private fun importOlcRtcFallback() {
         showLoading()
         lifecycleScope.launch(Dispatchers.IO) {
             val installed = OlcRtcProfileInstaller.reinstall(this@MainActivity)
@@ -482,7 +536,6 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
                 hideLoading()
             }
         }
-        return true
     }
 
     /**

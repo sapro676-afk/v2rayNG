@@ -404,10 +404,29 @@
     <string name="title_webdav_user">Username</string>
     <string name="title_webdav_pass">Password</string>
     <string name="title_webdav_remote_path">Remote directory (optional)</string>
-    <string name="menu_item_import_olcrtc_fallback">Abumba video fallback</string>
+    <string name="menu_item_import_olcrtc_fallback">WBStream fallback setup</string>
     <string name="menu_item_copy_olcrtc_diagnostics">Copy olcRTC diagnostics</string>
     <string name="title_import_olcrtc_fallback_success">Abumba video fallback added</string>
     <string name="title_copy_olcrtc_diagnostics_success">olcRTC diagnostics copied</string>
+    <string name="title_copy_olcrtc_status_success">olcRTC status copied</string>
+    <string name="title_olcrtc_configurator">WBStream fallback setup</string>
+    <string name="olcrtc_action_install_profile">Install / reinstall profile</string>
+    <string name="olcrtc_action_copy_status">Copy status</string>
+    <string name="olcrtc_status_profile_installed">installed</string>
+    <string name="olcrtc_status_profile_missing">not installed</string>
+    <string name="olcrtc_status_room_configured">configured</string>
+    <string name="olcrtc_status_room_missing">missing</string>
+    <string name="olcrtc_status_key_configured">configured</string>
+    <string name="olcrtc_status_key_missing">missing</string>
+    <string name="olcrtc_configurator_status">Carrier: %1$s
+Transport: %2$s
+Link: %3$s
+Client ID: %4$s
+Room: %5$s
+Key: %6$s
+Profile: %7$s
+
+SOCKS: 127.0.0.1:18080</string>
 
     <string-array name="share_method">
         <item>QRcode</item>
