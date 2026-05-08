@@ -1,0 +1,96 @@
+name: Build debug APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - olcrtc-fallback
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          log-accepted-android-sdk-licenses: false
+          cmdline-tools-version: "13114758"
+          packages: "platforms;android-36.1 build-tools;36.1.0 platform-tools"
+
+      - name: Install NDK
+        run: |
+          echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            --channel=0 \
+            --install "ndk;28.2.13676358"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          sed -i '10i\
+          \
+              ndkVersion = "28.2.13676358"' "$GITHUB_WORKSPACE/V2rayNG/app/build.gradle.kts"
+
+      - name: Restore cached libhevtun
+        id: cache-libhevtun-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/libs
+          key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+
+      - name: Build libhevtun
+        if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
+        run: bash compile-hevtun.sh
+
+      - name: Save libhevtun
+        if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/libs
+          key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+
+      - name: Copy libhevtun
+        run: cp -r "$GITHUB_WORKSPACE/libs" "$GITHUB_WORKSPACE/V2rayNG/app"
+
+      - name: Resolve AndroidLibXrayLite tag
+        run: |
+          git -C AndroidLibXrayLite fetch --tags --force
+          CURRENT_TAG="$(git -C AndroidLibXrayLite describe --tags --abbrev=0)"
+          echo "CURRENT_TAG=$CURRENT_TAG" >> "$GITHUB_ENV"
+
+      - name: Download libv2ray
+        uses: robinraju/release-downloader@v1.13
+        with:
+          repository: "2dust/AndroidLibXrayLite"
+          tag: ${{ env.CURRENT_TAG }}
+          fileName: "libv2ray.aar"
+          out-file-path: V2rayNG/app/libs/
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+          cache-dependency-path: |
+            V2rayNG/*.gradle.kts
+            V2rayNG/gradle/**/*.toml
+            V2rayNG/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Build fdroid debug arm64 APK
+        run: |
+          cd "$GITHUB_WORKSPACE/V2rayNG"
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod 755 gradlew
+          ./gradlew --no-daemon assembleFdroidDebug -PABI_FILTERS=arm64-v8a
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2rayng-olcrtc-fdroid-debug-arm64
+          path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/fdroid/debug/*.apk
+          if-no-files-found: error
