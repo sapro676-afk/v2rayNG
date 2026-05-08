@@ -164,6 +164,8 @@ jobs:
             adb logcat -d -v time > "$GITHUB_WORKSPACE/emulator-artifacts/logcat.txt" || true
             adb shell dumpsys package com.v2ray.ang.olcrtc > "$GITHUB_WORKSPACE/emulator-artifacts/package-dumpsys.txt" || true
             test -s "$GITHUB_WORKSPACE/emulator-artifacts/olcrtc.log"
+            grep -q "SOCKS listener is ready on 127.0.0.1:18080" "$GITHUB_WORKSPACE/emulator-artifacts/olcrtc.log"
+            ! grep -q "debug receiver start failed" "$GITHUB_WORKSPACE/emulator-artifacts/olcrtc.log"
 
       - name: Upload emulator diagnostics
         if: always()

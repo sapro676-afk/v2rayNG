@@ -6,14 +6,32 @@ import android.content.Intent
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.util.LogUtil
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.io.File
 import java.time.Instant
 
 class OlcRtcDebugReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        val pendingResult = goAsync()
+        val appContext = context.applicationContext
         when (intent.action) {
-            ACTION_START -> startOlcRtc(context.applicationContext)
-            ACTION_STOP -> stopOlcRtc(context.applicationContext)
+            ACTION_START -> CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    startOlcRtc(appContext)
+                } finally {
+                    pendingResult.finish()
+                }
+            }
+            ACTION_STOP -> CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    stopOlcRtc(appContext)
+                } finally {
+                    pendingResult.finish()
+                }
+            }
+            else -> pendingResult.finish()
         }
     }
 

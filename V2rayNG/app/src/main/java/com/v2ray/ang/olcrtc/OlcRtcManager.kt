@@ -178,7 +178,7 @@ object OlcRtcManager {
                 socket.connect(InetSocketAddress(SOCKS_HOST, SOCKS_PORT.toInt()), 250)
             }
             true
-        } catch (e: IOException) {
+        } catch (e: Exception) {
             lastSocksConnectError = "${e.javaClass.simpleName}: ${e.message}"
             false
         }
