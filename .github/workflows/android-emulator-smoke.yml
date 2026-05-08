@@ -72,6 +72,7 @@ jobs:
           cp "$RUNNER_TEMP/olcrtc/data/names" "$GITHUB_WORKSPACE/V2rayNG/app/src/main/assets/olcrtc-data/names"
           cp "$RUNNER_TEMP/olcrtc/data/surnames" "$GITHUB_WORKSPACE/V2rayNG/app/src/main/assets/olcrtc-data/surnames"
           cd "$RUNNER_TEMP/olcrtc"
+          git apply "$GITHUB_WORKSPACE/scripts/olcrtc-android-force-dns.patch"
           CGO_ENABLED=1 GOOS=android GOARCH=amd64 \
             CC="$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang" \
             go build -trimpath -ldflags="-s -w -checklinkname=0" \

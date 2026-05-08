@@ -1,0 +1,37 @@
+diff --git a/internal/protect/protect.go b/internal/protect/protect.go
+index b62f929..f0ad7cf 100644
+--- a/internal/protect/protect.go
++++ b/internal/protect/protect.go
+@@ -12,6 +12,8 @@ import (
+ 	"time"
+ )
+ 
++const androidDNSServer = "1.1.1.1:53"
++
+ // Protector is called with a socket file descriptor before connect.
+ // On Android, this calls VpnService.protect(fd) to bypass VPN routing.
+ var Protector func(fd int) bool //nolint:gochecknoglobals
+@@ -29,12 +31,23 @@ func controlFunc(network, _ string, c syscall.RawConn) error {
+ 	return err
+ }
+ 
++func protectedResolver() *net.Resolver {
++	return &net.Resolver{
++		PreferGo: true,
++		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
++			d := net.Dialer{Timeout: 3 * time.Second, Control: controlFunc}
++			return d.DialContext(ctx, network, androidDNSServer)
++		},
++	}
++}
++
+ // NewDialer returns a net.Dialer that calls Protector on each new socket.
+ func NewDialer() *net.Dialer {
+ 	return &net.Dialer{
+ 		Timeout:   10 * time.Second,
+ 		KeepAlive: 30 * time.Second,
+ 		Control:   controlFunc,
++		Resolver:  protectedResolver(),
+ 	}
+ }
+ 
