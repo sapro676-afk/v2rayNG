@@ -12,41 +12,74 @@ fun String.asBuildConfigString(): String =
 val olcrtcRepoPath = providers.environmentVariable("OLCRTC_REPO")
     .orElse(rootProject.layout.projectDirectory.asFile.parentFile.resolve("olcrtc").absolutePath)
 val olcrtcRepoDir = file(olcrtcRepoPath.get())
-val olcrtcAndroidAar = layout.buildDirectory.file("generated/olcrtc/olcrtc.aar")
-val olcrtcAndroidAarFile = olcrtcAndroidAar.get().asFile
+val androidLibXrayRepoPath = providers.environmentVariable("ANDROID_LIB_XRAY_REPO")
+    .orElse(rootProject.layout.projectDirectory.asFile.parentFile.resolve("AndroidLibXrayLite").absolutePath)
+val androidLibXrayRepoDir = file(androidLibXrayRepoPath.get())
+val combinedGoMobileWorkDir = layout.buildDirectory.dir("generated/gomobile-work")
+val combinedGoMobileAar = layout.buildDirectory.file("generated/gomobile/libv2ray-olcrtc.aar")
+val combinedGoMobileAarFile = combinedGoMobileAar.get().asFile
 
-val buildOlcrtcAndroidAar by tasks.registering(Exec::class) {
+fun readGoModulePath(goMod: File): String =
+    goMod.readLines()
+        .firstOrNull { it.startsWith("module ") }
+        ?.removePrefix("module ")
+        ?.trim()
+        ?: throw GradleException("Missing module directive in ${goMod.absolutePath}")
+
+val buildCombinedGoMobileAar by tasks.registering(Exec::class) {
     group = "build"
-    description = "Builds olcRTC gomobile Android AAR from OLCRTC_REPO."
+    description = "Builds one gomobile Android AAR containing AndroidLibXrayLite and olcRTC."
 
+    inputs.dir(androidLibXrayRepoDir)
     inputs.dir(olcrtcRepoDir.resolve("mobile"))
     inputs.dir(olcrtcRepoDir.resolve("internal"))
+    inputs.files(androidLibXrayRepoDir.resolve("go.mod"), androidLibXrayRepoDir.resolve("go.sum"))
     inputs.files(olcrtcRepoDir.resolve("go.mod"), olcrtcRepoDir.resolve("go.sum"))
-    outputs.file(olcrtcAndroidAar)
+    outputs.file(combinedGoMobileAar)
 
-    workingDir = olcrtcRepoDir
+    workingDir = combinedGoMobileWorkDir.get().asFile
 
     doFirst {
+        if (!androidLibXrayRepoDir.resolve("go.mod").exists()) {
+            throw GradleException(
+                "ANDROID_LIB_XRAY_REPO must point to an AndroidLibXrayLite checkout before building this APK: " +
+                    androidLibXrayRepoDir.absolutePath
+            )
+        }
         if (!olcrtcRepoDir.resolve("go.mod").exists()) {
             throw GradleException(
                 "OLCRTC_REPO must point to an olcrtc checkout before building this APK: ${olcrtcRepoDir.absolutePath}"
             )
         }
-        olcrtcAndroidAarFile.parentFile.mkdirs()
-    }
+        combinedGoMobileAarFile.parentFile.mkdirs()
+        workingDir.mkdirs()
 
-    commandLine(
-        "gomobile",
-        "bind",
-        "-target=android/arm,android/arm64,android/amd64",
-        "-androidapi",
-        "21",
-        "-ldflags",
-        "-s -w -checklinkname=0",
-        "-o",
-        olcrtcAndroidAarFile.absolutePath,
-        "./mobile"
-    )
+        val goWork = workingDir.resolve("go.work")
+        goWork.writeText(
+            """
+            go 1.26
+
+            use (
+                ${androidLibXrayRepoDir.absolutePath}
+                ${olcrtcRepoDir.absolutePath}
+            )
+            """.trimIndent() + "\n"
+        )
+
+        commandLine(
+            "gomobile",
+            "bind",
+            "-target=android/arm,android/arm64,android/amd64",
+            "-androidapi",
+            "21",
+            "-ldflags",
+            "-s -w -checklinkname=0",
+            "-o",
+            combinedGoMobileAarFile.absolutePath,
+            readGoModulePath(androidLibXrayRepoDir.resolve("go.mod")),
+            "${readGoModulePath(olcrtcRepoDir.resolve("go.mod"))}/mobile"
+        )
+    }
 }
 
 android {
@@ -192,8 +225,10 @@ android {
 
 dependencies {
     // Core Libraries
-    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
-    implementation(files(olcrtcAndroidAarFile).builtBy(buildOlcrtcAndroidAar))
+    implementation(
+        fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"), "exclude" to listOf("libv2ray.aar")))
+    )
+    implementation(files(combinedGoMobileAarFile).builtBy(buildCombinedGoMobileAar))
 
     // AndroidX Core Libraries
     implementation(libs.androidx.core.ktx)

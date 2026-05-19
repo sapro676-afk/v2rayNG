@@ -133,10 +133,18 @@ object OlcRtcManager {
     private fun configureMobile(config: OlcRtcConfig) {
         Mobile.setProviders()
         Mobile.setDebug(true)
-        Mobile.setLink(config.link)
+        setLinkIfSupported(config.link)
         Mobile.setTransport(config.transport)
         Mobile.setDNS("1.1.1.1:53")
         Mobile.setVP8Options(config.vp8Fps.toLong(), config.vp8Batch.toLong())
+    }
+
+    private fun setLinkIfSupported(link: String) {
+        runCatching {
+            Mobile::class.java
+                .getMethod("setLink", String::class.java)
+                .invoke(null, link)
+        }
     }
 
     private fun canConnectToSocks(config: OlcRtcConfig): Boolean {

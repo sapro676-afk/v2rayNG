@@ -61,7 +61,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "stable"
           cache: false
 
       - name: Checkout olcRTC
@@ -93,21 +93,6 @@ jobs:
             | base64 -d \
             > "$GITHUB_WORKSPACE/V2rayNG/app/src/main/assets/olcrtc/abumba_video_fallback.json"
 
-      - name: Resolve AndroidLibXrayLite tag
-        run: |
-          set -euo pipefail
-          git -C AndroidLibXrayLite fetch --tags --force
-          CURRENT_TAG="$(git -C AndroidLibXrayLite describe --tags --abbrev=0)"
-          echo "CURRENT_TAG=$CURRENT_TAG" >> "$GITHUB_ENV"
-
-      - name: Download libv2ray
-        uses: robinraju/release-downloader@v1.13
-        with:
-          repository: "2dust/AndroidLibXrayLite"
-          tag: ${{ env.CURRENT_TAG }}
-          fileName: "libv2ray.aar"
-          out-file-path: V2rayNG/app/libs/
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -128,6 +113,7 @@ jobs:
           OLCRTC_TRANSPORT: ${{ vars.OLCRTC_TRANSPORT || 'vp8channel' }}
           OLCRTC_LINK: ${{ vars.OLCRTC_LINK || 'direct' }}
           OLCRTC_REPO: ${{ github.workspace }}/olcrtc
+          ANDROID_LIB_XRAY_REPO: ${{ github.workspace }}/AndroidLibXrayLite
         run: |
           set -euo pipefail
           test -n "$OLCRTC_KEY"

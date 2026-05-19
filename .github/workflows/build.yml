@@ -58,22 +58,6 @@ jobs:
       run: |
         cp -r ${{ github.workspace }}/libs ${{ github.workspace }}/V2rayNG/app
 
-    - name: Fetch AndroidLibXrayLite tag
-      run: |
-        pushd AndroidLibXrayLite
-        CURRENT_TAG=$(git describe --tags --abbrev=0)
-        echo "Current tag in this repo: $CURRENT_TAG"
-        echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_ENV
-        popd
-
-    - name: Download libv2ray
-      uses: robinraju/release-downloader@v1.13
-      with:
-        repository: '2dust/AndroidLibXrayLite'
-        tag: ${{ env.CURRENT_TAG }}
-        fileName: 'libv2ray.aar'
-        out-file-path: V2rayNG/app/libs/
-
     - name: Setup Go
       uses: actions/setup-go@v6
       with:
@@ -120,6 +104,7 @@ jobs:
         OLCRTC_KEY: ${{ secrets.OLCRTC_KEY }}
         OLCRTC_ROOM_ID: ${{ secrets.OLCRTC_ROOM_ID }}
         OLCRTC_CLIENT_ID: ${{ secrets.OLCRTC_CLIENT_ID }}
+        ANDROID_LIB_XRAY_REPO: ${{ github.workspace }}/AndroidLibXrayLite
       run: |
         cd ${{ github.workspace }}/V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
