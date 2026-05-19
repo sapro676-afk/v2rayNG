@@ -157,27 +157,7 @@ jobs:
             adb exec-out run-as com.v2ray.ang.olcrtc cat files/olcrtc.log > "$GITHUB_WORKSPACE/emulator-artifacts/olcrtc.log" || true
             adb logcat -d -v time > "$GITHUB_WORKSPACE/emulator-artifacts/logcat.txt" || true
             adb shell dumpsys package com.v2ray.ang.olcrtc > "$GITHUB_WORKSPACE/emulator-artifacts/package-dumpsys.txt" || true
-            olcrtc_log="$GITHUB_WORKSPACE/emulator-artifacts/olcrtc.log"
-            logcat="$GITHUB_WORKSPACE/emulator-artifacts/logcat.txt"
-            carrier_re='carrier auth failed|join room failed|could not dial signal connection|transport connect'
-
-            test -s "$olcrtc_log"
-            grep -q "starting mobile sidecar" "$olcrtc_log"
-            ! grep -E "UnsatisfiedLinkError|NoClassDefFoundError|JNI DETECTED ERROR|dlopen failed" "$olcrtc_log" "$logcat"
-
-            if grep -q "SOCKS listener is ready on 127.0.0.1:18080" "$olcrtc_log"; then
-              echo "olcRTC SOCKS listener opened"
-            elif grep -Eq "$carrier_re" "$olcrtc_log"; then
-              echo "olcRTC reached carrier and was rejected by external room/auth state"
-            else
-              cat "$olcrtc_log"
-              exit 1
-            fi
-
-            if grep -q "debug receiver start failed" "$olcrtc_log" && ! grep -Eq "$carrier_re" "$olcrtc_log"; then
-              cat "$olcrtc_log"
-              exit 1
-            fi
+            bash -lc 'set -euo pipefail; olcrtc_log="$GITHUB_WORKSPACE/emulator-artifacts/olcrtc.log"; logcat="$GITHUB_WORKSPACE/emulator-artifacts/logcat.txt"; carrier_re="carrier auth failed|join room failed|could not dial signal connection|transport connect"; test -s "$olcrtc_log"; grep -q "starting mobile sidecar" "$olcrtc_log"; ! grep -E "UnsatisfiedLinkError|NoClassDefFoundError|JNI DETECTED ERROR|dlopen failed" "$olcrtc_log" "$logcat"; if grep -q "SOCKS listener is ready on 127.0.0.1:18080" "$olcrtc_log"; then echo "olcRTC SOCKS listener opened"; elif grep -Eq "$carrier_re" "$olcrtc_log"; then echo "olcRTC reached carrier and was rejected by external room/auth state"; else cat "$olcrtc_log"; exit 1; fi; if grep -q "debug receiver start failed" "$olcrtc_log" && ! grep -Eq "$carrier_re" "$olcrtc_log"; then cat "$olcrtc_log"; exit 1; fi'
 
       - name: Upload emulator diagnostics
         if: always()
