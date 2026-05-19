@@ -25,6 +25,7 @@ OLCRTC_BIN = os.getenv("OLCRTC_BIN", "./build/olcrtc-linux-amd64")
 START_SERVER = os.getenv("OLCRTC_START_SERVER", "1") != "0"
 CARRIER = os.getenv("OLCRTC_CARRIER", "wbstream")
 TRANSPORT = os.getenv("OLCRTC_TRANSPORT", "vp8channel")
+FIXED_ROOM_ID = os.getenv("OLCRTC_ROOM_ID", "")
 CLIENT_ID = os.getenv("OLCRTC_CLIENT_ID", "abumba-video-android")
 KEY = os.getenv("OLCRTC_KEY", token_hex(32))
 LINK = os.getenv("OLCRTC_LINK", "direct")
@@ -41,8 +42,8 @@ CLIENT_SOCKS_PORT = int(os.getenv("OLCRTC_CLIENT_SOCKS_PORT", "18080"))
 class BrokerState:
     def __init__(self) -> None:
         self.lock = threading.Lock()
-        self.room_id = ""
-        self.created_at = 0.0
+        self.room_id = FIXED_ROOM_ID
+        self.created_at = time.time() if FIXED_ROOM_ID else 0.0
         self.process: subprocess.Popen[str] | None = None
 
 
@@ -119,6 +120,15 @@ def start_server_locked(force: bool = False) -> None:
     ttl_expired = ROOM_TTL_SECONDS > 0 and state.created_at > 0 and time.time() - state.created_at > ROOM_TTL_SECONDS
     running = state.process is not None and state.process.poll() is None
 
+    if FIXED_ROOM_ID:
+        state.room_id = FIXED_ROOM_ID
+        if running and not force:
+            return
+        if running:
+            stop_server_locked()
+        spawn_server_locked()
+        return
+
     if state.room_id and not force and not ttl_expired:
         if running or not START_SERVER:
             return
@@ -182,6 +192,7 @@ def current_config() -> dict[str, Any]:
             "lease": {
                 "created_at_unix": int(state.created_at),
                 "room_ttl_seconds": ROOM_TTL_SECONDS,
+                "managed_room": not bool(FIXED_ROOM_ID),
             },
         }
 
@@ -248,6 +259,8 @@ def main() -> None:
     signal.signal(signal.SIGTERM, shutdown)
     with state.lock:
         start_server_locked()
+    if FIXED_ROOM_ID:
+        print(f"using fixed WB Stream room: {FIXED_ROOM_ID}", flush=True)
     httpd = ThreadingHTTPServer((BIND, PORT), Handler)
     print(f"broker listening on http://{BIND}:{PORT}/config.json", flush=True)
     httpd.serve_forever()
