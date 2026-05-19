@@ -62,7 +62,7 @@ object OlcRtcProfileInstaller {
 
     private fun generatedConfigText(): String? {
         val config = OlcRtcConfig.fromBuildConfig()
-        if (!config.isComplete()) return null
+        if (!config.canResolve()) return null
         return """
             {
               "remarks": "Abumba video fallback (olcrtc-socks)",
@@ -73,6 +73,8 @@ object OlcRtcProfileInstaller {
                 "client_id": ${config.clientId.jsonString()},
                 "key": ${config.key.jsonString()},
                 "link": ${config.link.jsonString()},
+                "config_url": ${config.configUrl.jsonString()},
+                "config_token": ${config.configToken.jsonString()},
                 "socks_host": ${config.socksHost.jsonString()},
                 "socks_port": ${config.socksPort},
                 "socks_user": ${config.socksUser.jsonString()},

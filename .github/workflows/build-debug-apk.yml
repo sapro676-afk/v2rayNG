@@ -108,12 +108,16 @@ jobs:
           OLCRTC_CARRIER: ${{ vars.OLCRTC_CARRIER || 'wbstream' }}
           OLCRTC_TRANSPORT: ${{ vars.OLCRTC_TRANSPORT || 'vp8channel' }}
           OLCRTC_LINK: ${{ vars.OLCRTC_LINK || 'direct' }}
+          OLCRTC_CONFIG_URL: ${{ secrets.OLCRTC_CONFIG_URL }}
+          OLCRTC_CONFIG_TOKEN: ${{ secrets.OLCRTC_CONFIG_TOKEN }}
           OLCRTC_REPO: ${{ github.workspace }}/olcrtc
           ANDROID_LIB_XRAY_REPO: ${{ github.workspace }}/AndroidLibXrayLite
         run: |
           set -euo pipefail
-          test -n "$OLCRTC_KEY"
-          test -n "$OLCRTC_ROOM_ID"
+          if [ -z "$OLCRTC_CONFIG_URL" ]; then
+            test -n "$OLCRTC_KEY"
+            test -n "$OLCRTC_ROOM_ID"
+          fi
           cd "$GITHUB_WORKSPACE/V2rayNG"
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           chmod 755 gradlew

@@ -418,6 +418,8 @@
     <string name="olcrtc_status_room_missing">missing</string>
     <string name="olcrtc_status_key_configured">configured</string>
     <string name="olcrtc_status_key_missing">missing</string>
+    <string name="olcrtc_status_broker_configured">configured</string>
+    <string name="olcrtc_status_broker_missing">missing</string>
     <string name="olcrtc_configurator_status">Carrier: %1$s
 Transport: %2$s
 Link: %3$s
@@ -425,6 +427,7 @@ Client ID: %4$s
 Room: %5$s
 Key: %6$s
 Profile: %7$s
+Broker: %8$s
 
 SOCKS: 127.0.0.1:18080</string>
 

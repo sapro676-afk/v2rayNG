@@ -13,6 +13,8 @@ data class OlcRtcConfig(
     val clientId: String = DEFAULT_CLIENT_ID,
     val key: String = "",
     val link: String = DEFAULT_LINK,
+    val configUrl: String = "",
+    val configToken: String = "",
     val socksHost: String = DEFAULT_SOCKS_HOST,
     val socksPort: Int = DEFAULT_SOCKS_PORT,
     val socksUser: String = "",
@@ -29,6 +31,8 @@ data class OlcRtcConfig(
             clientId = clientId.trim().ifBlank { DEFAULT_CLIENT_ID },
             key = key.trim(),
             link = link.trim().ifBlank { DEFAULT_LINK },
+            configUrl = configUrl.trim(),
+            configToken = configToken.trim(),
             socksHost = socksHost.trim().ifBlank { DEFAULT_SOCKS_HOST },
             socksPort = socksPort.takeIf { it in 1..65535 } ?: DEFAULT_SOCKS_PORT,
             socksUser = socksUser.trim(),
@@ -39,6 +43,7 @@ data class OlcRtcConfig(
     }
 
     fun isComplete(): Boolean = roomId.isNotBlank() && key.isNotBlank()
+    fun canResolve(): Boolean = isComplete() || configUrl.isNotBlank()
 
     fun apply(override: OlcRtcConfigOverride?): OlcRtcConfig {
         if (override == null) return this
@@ -49,6 +54,8 @@ data class OlcRtcConfig(
             clientId = override.clientId ?: clientId,
             key = override.key ?: key,
             link = override.link ?: link,
+            configUrl = override.configUrl ?: configUrl,
+            configToken = override.configToken ?: configToken,
             socksHost = override.socksHost ?: socksHost,
             socksPort = override.socksPort ?: socksPort,
             socksUser = override.socksUser ?: socksUser,
@@ -87,7 +94,9 @@ data class OlcRtcConfig(
                 roomId = BuildConfig.OLCRTC_ROOM_ID,
                 clientId = BuildConfig.OLCRTC_CLIENT_ID.ifBlank { DEFAULT_CLIENT_ID },
                 key = BuildConfig.OLCRTC_KEY,
-                link = BuildConfig.OLCRTC_LINK.ifBlank { DEFAULT_LINK }
+                link = BuildConfig.OLCRTC_LINK.ifBlank { DEFAULT_LINK },
+                configUrl = BuildConfig.OLCRTC_CONFIG_URL,
+                configToken = BuildConfig.OLCRTC_CONFIG_TOKEN
             ).normalized()
         }
 
@@ -97,6 +106,10 @@ data class OlcRtcConfig(
                 .apply(parseJsonMetadata(raw))
                 .apply(parseSocksOutbound(raw))
                 .normalized()
+        }
+
+        fun parseOverride(raw: String?): OlcRtcConfigOverride? {
+            return parseUri(raw) ?: parseJsonMetadata(raw) ?: parseSocksOutbound(raw)
         }
 
         fun normalizeProvider(value: String): String {
@@ -166,7 +179,9 @@ data class OlcRtcConfig(
 
         private fun parseJsonMetadata(raw: String?): OlcRtcConfigOverride? {
             val root = raw?.asJsonObjectOrNull() ?: return null
-            val olcrtc = root.get("olcrtc")?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
+            val olcrtc = root.get("olcrtc")?.takeIf { it.isJsonObject }?.asJsonObject
+                ?: root.takeIf { it.hasOlcRtcFields() }
+                ?: return null
             return OlcRtcConfigOverride(
                 provider = olcrtc.string("provider", "bypass_provider", "carrier"),
                 transport = olcrtc.string("transport"),
@@ -174,10 +189,12 @@ data class OlcRtcConfig(
                 clientId = olcrtc.string("client_id", "clientId"),
                 key = olcrtc.string("key", "password"),
                 link = olcrtc.string("link"),
+                configUrl = olcrtc.string("config_url", "configUrl", "lease_url", "leaseUrl", "broker_url", "brokerUrl"),
+                configToken = olcrtc.string("config_token", "configToken", "lease_token", "leaseToken", "broker_token", "brokerToken"),
                 socksHost = olcrtc.string("socks_host", "socksHost"),
                 socksPort = olcrtc.int("socks_port", "socksPort"),
                 socksUser = olcrtc.string("socks_user", "socksUser", "user", "username"),
-                socksPass = olcrtc.string("socks_pass", "socksPass", "pass", "password"),
+                socksPass = olcrtc.string("socks_pass", "socksPass", "pass"),
                 vp8Fps = olcrtc.int("vp8_fps", "vp8Fps"),
                 vp8Batch = olcrtc.int("vp8_batch", "vp8Batch")
             )
@@ -247,6 +264,27 @@ data class OlcRtcConfig(
         private fun JsonArray.firstObjectOrNull(predicate: (JsonObject) -> Boolean = { true }): JsonObject? {
             return firstOrNull { it.isJsonObject && predicate(it.asJsonObject) }?.asJsonObject
         }
+
+        private fun JsonObject.hasOlcRtcFields(): Boolean {
+            return listOf(
+                "provider",
+                "bypass_provider",
+                "carrier",
+                "transport",
+                "room_id",
+                "roomId",
+                "client_id",
+                "clientId",
+                "key",
+                "password",
+                "config_url",
+                "configUrl",
+                "lease_url",
+                "leaseUrl",
+                "broker_url",
+                "brokerUrl"
+            ).any { has(it) }
+        }
     }
 }
 
@@ -257,6 +295,8 @@ data class OlcRtcConfigOverride(
     val clientId: String? = null,
     val key: String? = null,
     val link: String? = null,
+    val configUrl: String? = null,
+    val configToken: String? = null,
     val socksHost: String? = null,
     val socksPort: Int? = null,
     val socksUser: String? = null,

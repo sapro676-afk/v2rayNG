@@ -410,12 +410,17 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
         } else {
             getString(R.string.olcrtc_status_profile_missing)
         }
-        val roomStatus = if (BuildConfig.OLCRTC_ROOM_ID.isNotBlank()) {
+        val brokerStatus = if (BuildConfig.OLCRTC_CONFIG_URL.isNotBlank()) {
+            getString(R.string.olcrtc_status_broker_configured)
+        } else {
+            getString(R.string.olcrtc_status_broker_missing)
+        }
+        val roomStatus = if (BuildConfig.OLCRTC_ROOM_ID.isNotBlank() || BuildConfig.OLCRTC_CONFIG_URL.isNotBlank()) {
             getString(R.string.olcrtc_status_room_configured)
         } else {
             getString(R.string.olcrtc_status_room_missing)
         }
-        val keyStatus = if (BuildConfig.OLCRTC_KEY.isNotBlank()) {
+        val keyStatus = if (BuildConfig.OLCRTC_KEY.isNotBlank() || BuildConfig.OLCRTC_CONFIG_URL.isNotBlank()) {
             getString(R.string.olcrtc_status_key_configured)
         } else {
             getString(R.string.olcrtc_status_key_missing)
@@ -432,7 +437,8 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
             clientId,
             roomStatus,
             keyStatus,
-            profileStatus
+            profileStatus,
+            brokerStatus
         )
     }
 

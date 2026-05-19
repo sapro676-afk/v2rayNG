@@ -47,7 +47,7 @@ object OlcRtcManager {
         }
 
         val raw = MmkvManager.decodeServerRaw(guid)
-        val config = OlcRtcConfig.resolve(raw)
+        var config = OlcRtcConfig.resolve(raw)
         activeConfig = config
         lastSocksConnectError = ""
         resetDiagnostics(context)
@@ -56,8 +56,14 @@ object OlcRtcManager {
             context,
             "start requested; roomConfigured=${config.roomId.isNotBlank()}; " +
                 "clientId=${config.clientId}; provider=${config.provider}; transport=${config.transport}; " +
-                "link=${config.link}; socks=${config.socksHost}:${config.socksPort}"
+                "link=${config.link}; brokerConfigured=${config.configUrl.isNotBlank()}; " +
+                "socks=${config.socksHost}:${config.socksPort}"
         )
+
+        config = OlcRtcConfigFetcher.fetchIfConfigured(config) { message ->
+            writeDiagnostics(context, message)
+        }
+        activeConfig = config
 
         if (!config.isComplete()) {
             writeDiagnostics(context, "missing olcRTC credentials")
