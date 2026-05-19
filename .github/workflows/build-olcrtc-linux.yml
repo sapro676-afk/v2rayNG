@@ -1,0 +1,46 @@
+name: Build olcRTC Linux
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - olcbox-sidecar
+    paths:
+      - ".github/workflows/build-olcrtc-linux.yml"
+
+jobs:
+  build-olcrtc-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout olcRTC
+        uses: actions/checkout@v4
+        with:
+          repository: openlibrecommunity/olcrtc
+          ref: ${{ vars.OLCRTC_REF || 'refactor/universal-carrier' }}
+          path: olcrtc
+          submodules: recursive
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache-dependency-path: olcrtc/go.sum
+
+      - name: Build Linux CLI
+        working-directory: olcrtc
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          go test ./cmd/olcrtc ./internal/app/session ./mobile
+          go build -trimpath -ldflags="-s -w" -o dist/olcrtc-linux-amd64 ./cmd/olcrtc
+          ./dist/olcrtc-linux-amd64 --help >/tmp/olcrtc-help.txt 2>&1 || true
+          grep -q "usage: olcrtc <config.yaml>" /tmp/olcrtc-help.txt
+
+      - name: Upload olcRTC Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: olcrtc-linux-amd64
+          path: olcrtc/dist/olcrtc-linux-amd64
+          if-no-files-found: error
