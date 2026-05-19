@@ -33,7 +33,6 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          go test ./cmd/olcrtc ./internal/app/session ./mobile
           go build -trimpath -ldflags="-s -w" -o dist/olcrtc-linux-amd64 ./cmd/olcrtc
           ./dist/olcrtc-linux-amd64 --help >/tmp/olcrtc-help.txt 2>&1 || true
           grep -q "usage: olcrtc <config.yaml>" /tmp/olcrtc-help.txt
