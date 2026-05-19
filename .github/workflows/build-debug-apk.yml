@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - olcrtc-fallback
+      - olcbox-sidecar
 
 jobs:
   build-debug-apk:
@@ -59,26 +60,23 @@ jobs:
           go-version: "1.25"
           cache: false
 
-      - name: Build olcRTC Android arm
+      - name: Checkout olcRTC
+        uses: actions/checkout@v4
+        with:
+          repository: openlibrecommunity/olcrtc
+          ref: ${{ vars.OLCRTC_REF || 'refactor/universal-carrier' }}
+          path: olcrtc
+          submodules: recursive
+
+      - name: Install gomobile
         run: |
           set -euo pipefail
-          git clone --depth 1 https://github.com/openlibrecommunity/olcrtc.git "$RUNNER_TEMP/olcrtc"
-          mkdir -p "$GITHUB_WORKSPACE/V2rayNG/app/libs/arm64-v8a"
-          mkdir -p "$GITHUB_WORKSPACE/V2rayNG/app/libs/armeabi-v7a"
-          mkdir -p "$GITHUB_WORKSPACE/V2rayNG/app/src/main/assets/olcrtc-data"
-          cp "$RUNNER_TEMP/olcrtc/data/names" "$GITHUB_WORKSPACE/V2rayNG/app/src/main/assets/olcrtc-data/names"
-          cp "$RUNNER_TEMP/olcrtc/data/surnames" "$GITHUB_WORKSPACE/V2rayNG/app/src/main/assets/olcrtc-data/surnames"
-          cd "$RUNNER_TEMP/olcrtc"
-          git apply "$GITHUB_WORKSPACE/scripts/olcrtc-android-force-dns.patch"
-          CGO_ENABLED=0 GOOS=android GOARCH=arm64 \
-            go build -trimpath -ldflags="-s -w -checklinkname=0" \
-            -o "$GITHUB_WORKSPACE/V2rayNG/app/libs/arm64-v8a/libolcrtc.so" ./cmd/olcrtc
-          CGO_ENABLED=1 GOOS=android GOARCH=arm GOARM=7 \
-            CC="$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi24-clang" \
-            go build -trimpath -ldflags="-s -w -checklinkname=0" \
-            -o "$GITHUB_WORKSPACE/V2rayNG/app/libs/armeabi-v7a/libolcrtc.so" ./cmd/olcrtc
-          chmod 0755 "$GITHUB_WORKSPACE/V2rayNG/app/libs/arm64-v8a/libolcrtc.so"
-          chmod 0755 "$GITHUB_WORKSPACE/V2rayNG/app/libs/armeabi-v7a/libolcrtc.so"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+          export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+          cd "$GITHUB_WORKSPACE/olcrtc"
+          gomobile init
 
       - name: Prepare bundled olcRTC fallback profile
         env:
@@ -122,8 +120,9 @@ jobs:
           OLCRTC_ROOM_ID: ${{ secrets.OLCRTC_ROOM_ID }}
           OLCRTC_CLIENT_ID: ${{ secrets.OLCRTC_CLIENT_ID }}
           OLCRTC_CARRIER: ${{ vars.OLCRTC_CARRIER || 'wbstream' }}
-          OLCRTC_TRANSPORT: ${{ vars.OLCRTC_TRANSPORT || 'datachannel' }}
+          OLCRTC_TRANSPORT: ${{ vars.OLCRTC_TRANSPORT || 'vp8channel' }}
           OLCRTC_LINK: ${{ vars.OLCRTC_LINK || 'direct' }}
+          OLCRTC_REPO: ${{ github.workspace }}/olcrtc
         run: |
           set -euo pipefail
           test -n "$OLCRTC_KEY"

@@ -2,183 +2,147 @@ package com.v2ray.ang.olcrtc
 
 import android.content.Context
 import com.v2ray.ang.AppConfig
-import com.v2ray.ang.BuildConfig
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.util.LogUtil
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import mobile.LogWriter
+import mobile.Mobile
+import mobile.SocketProtector
 import java.io.File
-import java.io.IOException
-import java.io.InterruptedIOException
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.time.Instant
 
 object OlcRtcManager {
     private const val TAG = AppConfig.TAG
-    private const val MARKER = "olcrtc-socks"
-    private const val SOCKS_HOST = "127.0.0.1"
-    private const val SOCKS_PORT = "18080"
     private const val SOCKS_START_TIMEOUT_MS = 30_000L
-    private const val DATA_ASSET_DIR = "olcrtc-data"
     private const val DIAG_FILE = "olcrtc.log"
-
-    @Volatile
-    private var process: Process? = null
-
-    @Volatile
-    private var socksReportedListening: Boolean = false
 
     @Volatile
     private var lastSocksConnectError: String = ""
 
+    @Volatile
+    private var activeConfig: OlcRtcConfig? = null
+
     fun isRequired(guid: String): Boolean {
         val config = MmkvManager.decodeServerConfig(guid)
         val raw = MmkvManager.decodeServerRaw(guid).orEmpty()
-        return raw.contains(MARKER) || config?.remarks?.contains("olcrtc", ignoreCase = true) == true
+        return raw.contains(OlcRtcConfig.MARKER) ||
+            raw.contains(OlcRtcConfig.URI_PREFIX) ||
+            raw.contains("\"olcrtc\"") ||
+            config?.remarks?.contains("olcrtc", ignoreCase = true) == true
     }
 
     @Synchronized
-    fun startIfRequired(context: Context, guid: String) {
+    fun startIfRequired(
+        context: Context,
+        guid: String,
+        protectSocket: ((Int) -> Boolean)? = null
+    ) {
         if (!isRequired(guid)) {
             stop()
             return
         }
-        if (process?.isAlive == true) {
+        if (runCatching { Mobile.isRunning() }.getOrDefault(false)) {
             return
         }
 
-        val key = BuildConfig.OLCRTC_KEY
-        val roomId = BuildConfig.OLCRTC_ROOM_ID
-        val clientId = BuildConfig.OLCRTC_CLIENT_ID.ifBlank { "v2rayng-android" }
-        val carrier = BuildConfig.OLCRTC_CARRIER.ifBlank { "wbstream" }
-        val transport = BuildConfig.OLCRTC_TRANSPORT.ifBlank { "datachannel" }
-        val link = BuildConfig.OLCRTC_LINK.ifBlank { "direct" }
-        socksReportedListening = false
+        val raw = MmkvManager.decodeServerRaw(guid)
+        val config = OlcRtcConfig.resolve(raw)
+        activeConfig = config
         lastSocksConnectError = ""
         resetDiagnostics(context)
-        writeDiagnostics(context, "start requested; roomConfigured=${roomId.isNotBlank()}; clientId=$clientId; carrier=$carrier; transport=$transport; link=$link")
-        if (key.isBlank() || roomId.isBlank()) {
-            writeDiagnostics(context, "missing olcRTC credentials in BuildConfig")
-            error("olcRTC fallback is not configured in this APK")
-        }
 
-        val binary = File(context.applicationInfo.nativeLibraryDir, "libolcrtc.so")
         writeDiagnostics(
             context,
-            "binary=${binary.absolutePath}; exists=${binary.exists()}; canExecute=${binary.canExecute()}; size=${binary.length()}"
+            "start requested; roomConfigured=${config.roomId.isNotBlank()}; " +
+                "clientId=${config.clientId}; provider=${config.provider}; transport=${config.transport}; " +
+                "link=${config.link}; socks=${config.socksHost}:${config.socksPort}"
         )
-        if (!binary.canExecute()) {
-            writeDiagnostics(context, "binary is missing or not executable")
-            error("olcRTC binary is missing or not executable")
+
+        if (!config.isComplete()) {
+            writeDiagnostics(context, "missing olcRTC credentials")
+            error("olcRTC fallback is not configured in this APK/profile")
         }
 
-        val dataDir = ensureDataDir(context)
-        writeDiagnostics(context, "dataDir=${dataDir.absolutePath}; names=${File(dataDir, "names").length()}; surnames=${File(dataDir, "surnames").length()}")
-        val cmd = mutableListOf(
-            binary.absolutePath,
-            "-mode", "cnc",
-            "-carrier", carrier,
-            "-transport", transport,
-            "-id", roomId,
-            "-client-id", clientId,
-            "-key", key,
-            "-link", link,
-            "-data", dataDir.absolutePath,
-            "-socks-host", SOCKS_HOST,
-            "-socks-port", SOCKS_PORT,
-            "-dns", "1.1.1.1:53",
-            "-debug"
-        )
-
-        LogUtil.w(TAG, "olcRTC: starting client")
-        writeDiagnostics(context, "starting client with $carrier/$transport/$link on $SOCKS_HOST:$SOCKS_PORT")
-        process = try {
-            ProcessBuilder(cmd)
-                .directory(context.filesDir)
-                .redirectErrorStream(true)
-                .start()
-                .also { proc ->
-                    CoroutineScope(Dispatchers.IO).launch {
-                        try {
-                            proc.inputStream.bufferedReader().useLines { lines ->
-                                lines.forEach { line ->
-                                    if (line.contains("SOCKS5 server listening on $SOCKS_HOST:$SOCKS_PORT")) {
-                                        socksReportedListening = true
-                                    }
-                                    writeDiagnostics(context, line)
-                                    LogUtil.w(TAG, "olcRTC: $line")
-                                }
-                            }
-                        } catch (e: InterruptedIOException) {
-                            writeDiagnostics(context, "stdout reader closed: ${e.javaClass.simpleName}: ${e.message}")
-                        } catch (e: IOException) {
-                            writeDiagnostics(context, "stdout reader ended: ${e.javaClass.simpleName}: ${e.message}")
-                        }
-                    }
-                }
+        try {
+            installMobileCallbacks(context, protectSocket)
+            configureMobile(config)
+            LogUtil.w(TAG, "olcRTC: starting sidecar")
+            writeDiagnostics(context, "starting mobile sidecar")
+            Mobile.startWithTransport(
+                config.provider,
+                config.transport,
+                config.roomId,
+                config.clientId,
+                config.key,
+                config.socksPort.toLong(),
+                config.socksUser,
+                config.socksPass
+            )
+            Mobile.waitReady(SOCKS_START_TIMEOUT_MS)
         } catch (e: Exception) {
-            writeDiagnostics(context, "failed to start process: ${e.javaClass.simpleName}: ${e.message}")
+            writeDiagnostics(context, "failed to start mobile sidecar: ${e.javaClass.simpleName}: ${e.message}")
+            stop()
             throw e
         }
 
-        if (!waitForSocks(context)) {
-            val proc = process
-            val message = if (proc?.isAlive == true) {
-                "olcRTC SOCKS did not open on $SOCKS_HOST:$SOCKS_PORT"
-            } else {
-                "olcRTC client exited during startup, exit=${runCatching { proc?.exitValue() }.getOrNull()}"
-            }
+        if (!canConnectToSocks(config)) {
+            val message = "olcRTC SOCKS did not open on ${config.socksHost}:${config.socksPort}; lastConnectError=$lastSocksConnectError"
             writeDiagnostics(context, message)
+            stop()
             error(message)
         }
-        writeDiagnostics(context, "SOCKS listener is ready on $SOCKS_HOST:$SOCKS_PORT")
-        LogUtil.w(TAG, "olcRTC: SOCKS listener is ready on $SOCKS_HOST:$SOCKS_PORT")
+
+        writeDiagnostics(context, "SOCKS listener is ready on ${config.socksHost}:${config.socksPort}")
+        LogUtil.w(TAG, "olcRTC: SOCKS listener is ready on ${config.socksHost}:${config.socksPort}")
     }
 
     @Synchronized
     fun stop() {
-        val running = process ?: return
-        LogUtil.w(TAG, "olcRTC: stopping client")
-        runCatching { running.destroy() }
-        process = null
+        if (!runCatching { Mobile.isRunning() }.getOrDefault(false)) {
+            activeConfig = null
+            return
+        }
+        LogUtil.w(TAG, "olcRTC: stopping sidecar")
+        runCatching { Mobile.stop() }
+        activeConfig = null
     }
 
     fun readDiagnostics(context: Context): String {
         return diagnosticFile(context).takeIf { it.exists() }?.readText().orEmpty()
     }
 
-    private fun ensureDataDir(context: Context): File {
-        val dir = File(context.filesDir, DATA_ASSET_DIR)
-        dir.mkdirs()
-        copyAsset(context, "$DATA_ASSET_DIR/names", File(dir, "names"))
-        copyAsset(context, "$DATA_ASSET_DIR/surnames", File(dir, "surnames"))
-        return dir
+    private fun installMobileCallbacks(context: Context, protectSocket: ((Int) -> Boolean)?) {
+        Mobile.setProtector(object : SocketProtector {
+            override fun protect(fd: Long): Boolean {
+                val protected = protectSocket?.invoke(fd.toInt()) ?: true
+                writeDiagnostics(context, "protect fd=$fd result=$protected")
+                return protected
+            }
+        })
+        Mobile.setLogWriter(object : LogWriter {
+            override fun writeLog(msg: String) {
+                val line = msg.trimEnd()
+                writeDiagnostics(context, line)
+                LogUtil.w(TAG, "olcRTC: $line")
+            }
+        })
+        Mobile.setProviders()
     }
 
-    private fun copyAsset(context: Context, assetName: String, target: File) {
-        if (target.length() > 0) return
-        context.assets.open(assetName).use { input ->
-            target.outputStream().use { output -> input.copyTo(output) }
-        }
+    private fun configureMobile(config: OlcRtcConfig) {
+        Mobile.setProviders()
+        Mobile.setDebug(true)
+        Mobile.setLink(config.link)
+        Mobile.setTransport(config.transport)
+        Mobile.setDNS("1.1.1.1:53")
+        Mobile.setVP8Options(config.vp8Fps.toLong(), config.vp8Batch.toLong())
     }
 
-    private fun waitForSocks(context: Context): Boolean {
-        val deadline = System.currentTimeMillis() + SOCKS_START_TIMEOUT_MS
-        while (System.currentTimeMillis() < deadline) {
-            if (process?.isAlive != true) return false
-            if (socksReportedListening || canConnectToSocks()) return true
-            Thread.sleep(250L)
-        }
-        writeDiagnostics(context, "SOCKS wait timed out after ${SOCKS_START_TIMEOUT_MS}ms; lastConnectError=$lastSocksConnectError")
-        return false
-    }
-
-    private fun canConnectToSocks(): Boolean {
+    private fun canConnectToSocks(config: OlcRtcConfig): Boolean {
         return try {
             Socket().use { socket ->
-                socket.connect(InetSocketAddress(SOCKS_HOST, SOCKS_PORT.toInt()), 250)
+                socket.connect(InetSocketAddress(config.socksHost, config.socksPort), 500)
             }
             true
         } catch (e: Exception) {

@@ -34,9 +34,6 @@ jobs:
           --channel=0 \
           --install "ndk;28.2.13676358"
         echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
-        sed -i '10i\
-        \
-            ndkVersion = "28.2.13676358"' ${{ github.workspace }}/V2rayNG/app/build.gradle.kts
 
     - name: Restore cached libhevtun
       id: cache-libhevtun-restore
@@ -77,6 +74,30 @@ jobs:
         fileName: 'libv2ray.aar'
         out-file-path: V2rayNG/app/libs/
 
+    - name: Setup Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: 'stable'
+        cache: false
+
+    - name: Checkout olcRTC
+      uses: actions/checkout@v6
+      with:
+        repository: openlibrecommunity/olcrtc
+        ref: ${{ vars.OLCRTC_REF || 'refactor/universal-carrier' }}
+        path: olcrtc
+        submodules: recursive
+
+    - name: Install gomobile
+      run: |
+        set -euo pipefail
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+        go install golang.org/x/mobile/cmd/gomobile@latest
+        export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+        export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+        cd "$GITHUB_WORKSPACE/olcrtc"
+        gomobile init
+
     - name: Setup Java
       uses: actions/setup-java@v5
       with:
@@ -91,6 +112,14 @@ jobs:
         encodedString: ${{ secrets.APP_KEYSTORE_BASE64 }}
 
     - name: Build APK
+      env:
+        OLCRTC_REPO: ${{ github.workspace }}/olcrtc
+        OLCRTC_CARRIER: ${{ vars.OLCRTC_CARRIER || 'wbstream' }}
+        OLCRTC_TRANSPORT: ${{ vars.OLCRTC_TRANSPORT || 'vp8channel' }}
+        OLCRTC_LINK: ${{ vars.OLCRTC_LINK || 'direct' }}
+        OLCRTC_KEY: ${{ secrets.OLCRTC_KEY }}
+        OLCRTC_ROOM_ID: ${{ secrets.OLCRTC_ROOM_ID }}
+        OLCRTC_CLIENT_ID: ${{ secrets.OLCRTC_CLIENT_ID }}
       run: |
         cd ${{ github.workspace }}/V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties

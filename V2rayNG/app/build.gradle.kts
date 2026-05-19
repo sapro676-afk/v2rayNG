@@ -1,3 +1,5 @@
+import org.gradle.api.GradleException
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -6,6 +8,46 @@ plugins {
 
 fun String.asBuildConfigString(): String =
     "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+val olcrtcRepoPath = providers.environmentVariable("OLCRTC_REPO")
+    .orElse(rootProject.layout.projectDirectory.asFile.parentFile.resolve("olcrtc").absolutePath)
+val olcrtcRepoDir = file(olcrtcRepoPath.get())
+val olcrtcAndroidAar = layout.buildDirectory.file("generated/olcrtc/olcrtc.aar")
+val olcrtcAndroidAarFile = olcrtcAndroidAar.get().asFile
+
+val buildOlcrtcAndroidAar by tasks.registering(Exec::class) {
+    group = "build"
+    description = "Builds olcRTC gomobile Android AAR from OLCRTC_REPO."
+
+    inputs.dir(olcrtcRepoDir.resolve("mobile"))
+    inputs.dir(olcrtcRepoDir.resolve("internal"))
+    inputs.files(olcrtcRepoDir.resolve("go.mod"), olcrtcRepoDir.resolve("go.sum"))
+    outputs.file(olcrtcAndroidAar)
+
+    workingDir = olcrtcRepoDir
+
+    doFirst {
+        if (!olcrtcRepoDir.resolve("go.mod").exists()) {
+            throw GradleException(
+                "OLCRTC_REPO must point to an olcrtc checkout before building this APK: ${olcrtcRepoDir.absolutePath}"
+            )
+        }
+        olcrtcAndroidAarFile.parentFile.mkdirs()
+    }
+
+    commandLine(
+        "gomobile",
+        "bind",
+        "-target=android/arm,android/arm64,android/amd64",
+        "-androidapi",
+        "21",
+        "-ldflags",
+        "-s -w -checklinkname=0",
+        "-o",
+        olcrtcAndroidAarFile.absolutePath,
+        "./mobile"
+    )
+}
 
 android {
     namespace = "com.v2ray.ang"
@@ -23,7 +65,7 @@ android {
         buildConfigField("String", "OLCRTC_ROOM_ID", (System.getenv("OLCRTC_ROOM_ID") ?: "").asBuildConfigString())
         buildConfigField("String", "OLCRTC_CLIENT_ID", (System.getenv("OLCRTC_CLIENT_ID") ?: "").asBuildConfigString())
         buildConfigField("String", "OLCRTC_CARRIER", (System.getenv("OLCRTC_CARRIER") ?: "wbstream").asBuildConfigString())
-        buildConfigField("String", "OLCRTC_TRANSPORT", (System.getenv("OLCRTC_TRANSPORT") ?: "datachannel").asBuildConfigString())
+        buildConfigField("String", "OLCRTC_TRANSPORT", (System.getenv("OLCRTC_TRANSPORT") ?: "vp8channel").asBuildConfigString())
         buildConfigField("String", "OLCRTC_LINK", (System.getenv("OLCRTC_LINK") ?: "direct").asBuildConfigString())
 
         val abiFilterList = (properties["ABI_FILTERS"] as? String)?.split(';')
@@ -151,6 +193,7 @@ android {
 dependencies {
     // Core Libraries
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
+    implementation(files(olcrtcAndroidAarFile).builtBy(buildOlcrtcAndroidAar))
 
     // AndroidX Core Libraries
     implementation(libs.androidx.core.ktx)

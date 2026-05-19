@@ -214,7 +214,9 @@ object CoreServiceManager {
         val config = MmkvManager.decodeServerConfig(guid) ?: error("Failed to decode server config")
 
         LogUtil.i(AppConfig.TAG, "StartCore-Manager: Starting core loop for ${config.remarks}")
-        OlcRtcManager.startIfRequired(service, guid)
+        OlcRtcManager.startIfRequired(service, guid) { socket ->
+            serviceControl?.get()?.vpnProtect(socket) ?: true
+        }
 
         val result = CoreConfigManager.getV2rayConfig(service, guid)
         LogUtil.d(AppConfig.TAG, result.content)

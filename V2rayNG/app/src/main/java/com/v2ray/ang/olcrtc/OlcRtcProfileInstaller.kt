@@ -11,7 +11,7 @@ object OlcRtcProfileInstaller {
     private const val MARKER = "olcrtc-socks"
 
     fun ensureInstalled(context: Context): Boolean {
-        val configText = readAsset(context) ?: return false
+        val configText = readAsset(context) ?: generatedConfigText() ?: return false
         if (hasInstalledProfile()) {
             return false
         }
@@ -20,7 +20,7 @@ object OlcRtcProfileInstaller {
     }
 
     fun reinstall(context: Context): Boolean {
-        val configText = readAsset(context) ?: return false
+        val configText = readAsset(context) ?: generatedConfigText() ?: return false
         return installCustomConfig(configText) != null
     }
 
@@ -58,5 +58,65 @@ object OlcRtcProfileInstaller {
             LogUtil.e(AppConfig.TAG, "failed to install bundled olcRTC fallback profile", e)
             null
         }
+    }
+
+    private fun generatedConfigText(): String? {
+        val config = OlcRtcConfig.fromBuildConfig()
+        if (!config.isComplete()) return null
+        return """
+            {
+              "remarks": "Abumba video fallback (olcrtc-socks)",
+              "olcrtc": {
+                "provider": ${config.provider.jsonString()},
+                "transport": ${config.transport.jsonString()},
+                "room_id": ${config.roomId.jsonString()},
+                "client_id": ${config.clientId.jsonString()},
+                "key": ${config.key.jsonString()},
+                "link": ${config.link.jsonString()},
+                "socks_host": ${config.socksHost.jsonString()},
+                "socks_port": ${config.socksPort},
+                "socks_user": ${config.socksUser.jsonString()},
+                "socks_pass": ${config.socksPass.jsonString()},
+                "vp8_fps": ${config.vp8Fps},
+                "vp8_batch": ${config.vp8Batch}
+              },
+              "log": {
+                "loglevel": "warning"
+              },
+              "outbounds": [
+                {
+                  "tag": "olcrtc-socks",
+                  "protocol": "socks",
+                  "settings": {
+                    "servers": [
+                      {
+                        "address": ${config.socksHost.jsonString()},
+                        "port": ${config.socksPort}
+                      }
+                    ]
+                  }
+                },
+                {
+                  "tag": "direct",
+                  "protocol": "freedom",
+                  "settings": {}
+                }
+              ],
+              "routing": {
+                "domainStrategy": "AsIs",
+                "rules": [
+                  {
+                    "type": "field",
+                    "network": "tcp,udp",
+                    "outboundTag": "olcrtc-socks"
+                  }
+                ]
+              }
+            }
+        """.trimIndent()
+    }
+
+    private fun String.jsonString(): String {
+        return "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
     }
 }
